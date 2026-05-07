@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+html {
+  scroll-behavior: smooth;
+}
+
+:root {
+  /* Brand Colors from Smart Logo Maker Web */
+  --brand-primary: #ff5c01;
+  --brand-secondary: #ff007a;
+  --brand-tertiary: #c400ff;
+  --brand-ink: #0f172a;
+  --brand-muted: #64748b;
+  --brand-dark: #03030b;
+  --brand-shell-start: #ffffff;
+  --brand-shell-mid: #f8fafc;
+  --brand-shell-end: #f1f5f9;
+  --brand-panel: rgba(255, 255, 255, 0.8);
+  --brand-panel-border: rgba(255, 255, 255, 0.5);
+
+  --background: var(--brand-shell-mid);
+  --foreground: var(--brand-ink);
+
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Tailwind 4 Color Tokens */
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-tertiary: var(--brand-tertiary);
+  --color-sidebar: var(--brand-ink);
+  --color-background: var(--brand-shell-mid);
+  --color-foreground: var(--brand-ink);
+
+  /* Sidebar Tokens */
+  --sidebar-foreground: #f8fafc;
+  --sidebar-accent: rgba(255, 255, 255, 0.05);
+
+  /* Neutral Colors */
+  --card-bg: #ffffff;
+  --card-border: transparent;
+  --muted: var(--brand-muted);
+  --muted-foreground: #94a3b8;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 2rem;
+}
+
+@layer utilities {
+  .brand-page-shell {
+    background: radial-gradient(circle at 0% 0%, #fdfbfb 0%, #ebf4ff 100%);
+  }
+
+  .brand-gradient-bg {
+    background-image: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-secondary) 50%, var(--brand-tertiary) 100%);
+  }
+
+  .brand-gradient-text {
+    background-image: linear-gradient(90deg, var(--brand-primary) 0%, var(--brand-secondary) 52%, var(--brand-tertiary) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .brand-panel {
+    border-radius: 2rem;
+    background-color: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+    backdrop-filter: blur(20px);
+    border: none !important;
+  }
+
+  .glass {
+    background-color: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(16px);
+    border: none !important;
+  }
+
+  .premium-shadow {
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.08);
+  }
+}
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  height: 100%;
+}
+
+@layer base {
+  * {
+    border-color: transparent !important;
+    border-width: 0 !important;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
