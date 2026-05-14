@@ -5,8 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Activity,
-  FileText,
-  X
+  FileText
 } from "lucide-react";
 
 const navigation = [
@@ -18,7 +17,7 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside className="hidden w-72 shrink-0 bg-white p-6 md:block">
+    <aside className="hidden h-full w-72 shrink-0 overflow-y-auto border-r border-slate-100 bg-white p-6 md:sticky md:top-0 md:block">
       <div className="flex h-full flex-col">
         <nav className="flex-1 space-y-2">
           {navigation.map((item) => {

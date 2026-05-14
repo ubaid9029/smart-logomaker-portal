@@ -26,9 +26,11 @@ export interface FeatureUsageItem {
 }
 
 export interface ApiDocEntry {
+  id: string;
   path: string;
   method: string;
   summary: string;
+  queryExample?: string;
   requestExample: string;
   responseExample: string;
   notes: string[];
@@ -96,24 +98,30 @@ const dashboardMetrics: DashboardMetric[] = [
 
 export async function getPlatformStats() {
   const supabase = await getServiceRoleClient();
-  if (!supabase) return dashboardMetrics; 
+  if (!supabase) return dashboardMetrics;
 
   try {
-    const { count: userCount } = await supabase.from('api_keys').select('*', { count: 'exact', head: true });
-    const { count: logoCount } = await supabase.from('logo_history').select('*', { count: 'exact', head: true });
-    
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count: apiCount } = await supabase.from('api_usage').select('*', { count: 'exact', head: true }).gte('created_at', oneDayAgo);
 
-    const { count: activityCount } = await supabase.from('activity_logs').select('*', { count: 'exact', head: true });
+    const [
+      { count: userCount },
+      { count: logoRequestCount },
+      { count: apiCount },
+      { count: eventCount },
+    ] = await Promise.all([
+      supabase.from("api_request_logs").select("user_id", { count: "exact", head: true }).not("user_id", "is", null),
+      supabase.from("api_request_logs").select("id", { count: "exact", head: true }).eq("event_name", "logo_generate").eq("is_success", true),
+      supabase.from("api_request_logs").select("id", { count: "exact", head: true }).gte("created_at", oneDayAgo),
+      supabase.from("api_request_logs").select("id", { count: "exact", head: true }).not("event_name", "is", null),
+    ]);
 
     return [
-      { label: "Total Users", value: (userCount || 0).toLocaleString(), detail: "Active API identities identified" },
-      { label: "Logo Generations", value: (logoCount || 0).toLocaleString(), detail: "Successful generations in history" },
+      { label: "Total Users", value: (userCount || 0).toLocaleString(), detail: "Identified requests with linked users" },
+      { label: "Logo Generations", value: (logoRequestCount || 0).toLocaleString(), detail: "Successful logo generation requests" },
       { label: "API Load (24h)", value: (apiCount || 0).toLocaleString(), detail: "Total requests in the last 24 hours" },
-      { label: "System Events", value: (activityCount || 0).toLocaleString(), detail: "Total activity logs captured" },
+      { label: "System Events", value: (eventCount || 0).toLocaleString(), detail: "Requests tagged with business events" },
     ];
-  } catch (err) {
+  } catch {
     return dashboardMetrics;
   }
 }
@@ -124,12 +132,16 @@ export async function getLiveActiveUsers() {
 
   const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const { data } = await supabase
-    .from('activity_logs')
-    .select('actor')
-    .gte('timestamp', fiveMinsAgo);
+    .from("api_request_logs")
+    .select("user_id, ip_address")
+    .gte("created_at", fiveMinsAgo);
 
   if (!data) return 0;
-  const uniqueUsers = new Set(data.map(item => item.actor));
+  const uniqueUsers = new Set(
+    data
+      .map((item) => item.user_id || item.ip_address)
+      .filter((value): value is string => Boolean(value))
+  );
   return uniqueUsers.size;
 }
 
@@ -138,15 +150,15 @@ export async function getFeatureAdoption(): Promise<FeatureUsageItem[]> {
   if (!supabase) return featureUsage;
 
   try {
-    const { data } = await supabase.from('activity_logs').select('endpoint');
+    const { data } = await supabase.from("api_request_logs").select("endpoint");
     if (!data || data.length === 0) return featureUsage;
 
     const total = data.length;
     const counts = {
-      gen: data.filter(d => d.endpoint === '/api/generate').length,
-      design: data.filter(d => d.endpoint === '/api/designs').length,
-      lib: data.filter(d => d.endpoint === '/api/library').length,
-      auth: data.filter(d => d.endpoint === '/api/auth/session').length,
+      gen: data.filter((d) => d.endpoint === "/api/generate").length,
+      design: data.filter((d) => d.endpoint === "/api/designs").length,
+      lib: data.filter((d) => d.endpoint === "/api/library").length,
+      auth: data.filter((d) => d.endpoint === "/api/auth/session").length,
     };
 
     return [
@@ -155,7 +167,7 @@ export async function getFeatureAdoption(): Promise<FeatureUsageItem[]> {
       { label: "Favorites", percentage: Math.round((counts.lib / total) * 100) || 0, detail: "User bookmarking activity" },
       { label: "Auth Resolver", percentage: Math.round((counts.auth / total) * 100) || 0, detail: "Identity verification hits" },
     ];
-  } catch (err) {
+  } catch {
     return featureUsage;
   }
 }
@@ -169,68 +181,106 @@ const featureUsage: FeatureUsageItem[] = [
 
 const apiDocs: ApiDocEntry[] = [
   {
+    id: "api-root-get",
+    path: "/api",
+    method: "GET",
+    summary: "API root redirect",
+    requestExample: "curl -X GET /api",
+    responseExample: JSON.stringify({ redirect: "/api-docs" }, null, 2),
+    notes: ["Redirects direct browser hits to the documentation screen.", "Uses the configured app URL as the redirect base."],
+  },
+  {
+    id: "generate-post",
     path: "/api/generate",
     method: "POST",
     summary: "AI Logo Generation Engine",
-    requestExample: JSON.stringify({ name: "Brand", slogan: "Tagline", industryId: 23 }, null, 2),
-    responseExample: JSON.stringify({ success: true, logos: [{ id: "lg_1", url: "..." }] }, null, 2),
-    notes: ["Captures full business payload in activity_logs.", "Requires valid API key or session."],
+    requestExample: JSON.stringify({ name: "Brand", slogan: "Tagline", industryId: 23, fontId: "1", colorId: "1" }, null, 2),
+    responseExample: JSON.stringify({ data: [{ logoId: "lg_1", url: "..." }] }, null, 2),
+    notes: ["Requires a valid API key or authenticated session.", "Rejects empty business names and unsupported color IDs.", "Forwards the request to LogoAI and logs the result in api_request_logs."],
   },
   {
+    id: "designs-get",
     path: "/api/designs",
     method: "GET",
     summary: "Fetch User Design Library",
     requestExample: "curl -X GET /api/designs",
-    responseExample: JSON.stringify([{ id: "ds_1", name: "My Logo" }], null, 2),
-    notes: ["Returns all designs for the current user session."],
+    responseExample: JSON.stringify([{ id: "ds_1", user_id: "user_1", image_path: "/logos/1.png", design_json: { objects: [] } }], null, 2),
+    notes: ["Requires an authenticated Supabase user.", "Returns designs ordered by updated_at descending."],
   },
   {
+    id: "designs-post",
     path: "/api/designs",
     method: "POST",
     summary: "Save or Update Design",
-    requestExample: JSON.stringify({ designJson: "{...}", name: "New Design" }, null, 2),
-    responseExample: JSON.stringify({ success: true, id: "ds_99" }, null, 2),
-    notes: ["Performs upsert logic based on design ID."],
+    requestExample: JSON.stringify({ id: "optional-design-id", designJson: { objects: [] }, imagePath: "/logos/fresh.png" }, null, 2),
+    responseExample: JSON.stringify({ id: "ds_99", user_id: "user_1", image_path: "/logos/fresh.png", design_json: { objects: [] } }, null, 2),
+    notes: ["Creates a new design when id is omitted.", "Updates an existing owned design when id is provided."],
   },
   {
+    id: "designs-delete",
     path: "/api/designs",
     method: "DELETE",
     summary: "Remove Design from Cloud",
+    queryExample: "id=ds_99",
     requestExample: "curl -X DELETE /api/designs?id=ds_99",
     responseExample: JSON.stringify({ success: true }, null, 2),
-    notes: ["Permanent deletion. Requires ownership verification."],
+    notes: ["Requires an authenticated user.", "Needs the id query parameter."],
   },
   {
+    id: "library-get",
     path: "/api/library",
     method: "GET",
     summary: "Fetch Favorite Logos",
     requestExample: "curl -X GET /api/library",
-    responseExample: JSON.stringify([{ favoriteKey: "fav_1" }], null, 2),
-    notes: ["Returns favorited logos for the current user."],
+    responseExample: JSON.stringify([{ favorite_key: "fav_1", user_id: "user_1", image_url: "https://..." }], null, 2),
+    notes: ["Requires an authenticated user.", "Returns favorite logos ordered by updated_at descending."],
   },
   {
+    id: "library-post",
     path: "/api/library",
     method: "POST",
-    summary: "Add/Remove Favorite",
-    requestExample: JSON.stringify({ favoriteKey: "fav_01", action: "toggle" }, null, 2),
-    responseExample: JSON.stringify({ success: true }, null, 2),
-    notes: ["Used for the 'Heart' icon functionality."],
+    summary: "Save Favorite Logo",
+    requestExample: JSON.stringify({ favoriteKey: "fav_01", rowData: { image_url: "https://...", business_name: "Brand" } }, null, 2),
+    responseExample: JSON.stringify({ favorite_key: "fav_01", user_id: "user_1", image_url: "https://..." }, null, 2),
+    notes: ["Upserts by user_id + favorite_key.", "Used when a logo is bookmarked from the editor or results page."],
   },
   {
+    id: "library-delete",
+    path: "/api/library",
+    method: "DELETE",
+    summary: "Delete Favorite Logo",
+    queryExample: "favoriteKey=fav_01",
+    requestExample: "curl -X DELETE '/api/library?favoriteKey=fav_01'",
+    responseExample: JSON.stringify({ success: true }, null, 2),
+    notes: ["Requires an authenticated user.", "Needs the favoriteKey query parameter."],
+  },
+  {
+    id: "auth-session-get",
     path: "/api/auth/session",
     method: "GET",
     summary: "Unified Identity & Auth Resolver",
     requestExample: "curl -X GET /api/auth/session",
     responseExample: JSON.stringify({ user: { id: "u_1", email: "admin@smart.com" } }, null, 2),
-    notes: ["Used by both Web and Admin portals.", "Logs IP and Actor identity."],
+    notes: ["Always responds with status 200.", "Returns user: null when the session is missing or resolution fails."],
   },
   {
+    id: "industries-get",
     path: "/api/industries",
     method: "GET",
     summary: "Fetch Supported Industry Taxonomies",
     requestExample: "curl -X GET /api/industries",
-    responseExample: JSON.stringify({ industries: [{ id: 1, name: "Tech" }] }, null, 2),
-    notes: ["Publicly accessible but rate-limited.", "Used for the industry selector."],
+    responseExample: JSON.stringify([{ id: 1, name: "Tech" }], null, 2),
+    notes: ["Protected by the shared API security layer.", "Falls back to an empty array when the upstream request fails."],
+  },
+  {
+    id: "font-proxy-get",
+    path: "/api/font-proxy",
+    method: "GET",
+    summary: "Fetch Curated Font Assets",
+    queryExample: "family=Plus%20Jakarta%20Sans&weight=700",
+    requestExample: "curl -X GET '/api/font-proxy?family=Plus%20Jakarta%20Sans&weight=700'",
+    responseExample: JSON.stringify({ note: "Returns binary font data with a font/* content-type." }, null, 2),
+    notes: ["Supports curated Google font lookup via family and weight.", "Also supports a validated src query parameter for approved font hosts."],
   }
 ];
 
@@ -367,3 +417,77 @@ export async function appendActivityLog(entry: Omit<ActivityLogEntry, "id" | "ti
 
   return record;
 }
+
+export interface ApiRequestLogEntry {
+  id: string;
+  created_at: string;
+  endpoint: string | null;
+  method: string | null;
+  path: string | null;
+  query_params: Record<string, unknown> | null;
+  user_id: string | null;
+  api_key_id: string | null;
+  ip_address: string | null;
+  origin: string | null;
+  referer: string | null;
+  device_type: string | null;
+  user_agent: string | null;
+  response_status: number | null;
+  response_message: string | null;
+  duration_ms: number | null;
+  app_source: string | null;
+  request_type: string | null;
+  event_name: string | null;
+  is_success: boolean | null;
+  business_name: string | null;
+  industry_id: number | null;
+  logo_count: number | null;
+  error_code: string | null;
+}
+
+export async function listApiRequestLogs(limit = 100) {
+  const normalizedLimit = normalizeLimit(limit);
+  const client = await getServiceRoleClient();
+
+  if (!client) {
+    return [] as ApiRequestLogEntry[];
+  }
+
+  const { data, error } = await client
+    .from("api_request_logs")
+    .select(`
+      id,
+      created_at,
+      endpoint,
+      method,
+      path,
+      query_params,
+      user_id,
+      api_key_id,
+      ip_address,
+      origin,
+      referer,
+      device_type,
+      user_agent,
+      response_status,
+      response_message,
+      duration_ms,
+      app_source,
+      request_type,
+      event_name,
+      is_success,
+      business_name,
+      industry_id,
+      logo_count,
+      error_code
+    `)
+    .order("created_at", { ascending: false })
+    .limit(normalizedLimit);
+
+  if (error || !data) {
+    return [] as ApiRequestLogEntry[];
+  }
+
+  return data as ApiRequestLogEntry[];
+}
+

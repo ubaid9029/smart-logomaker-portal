@@ -16,11 +16,15 @@ export default function PortalShell({ title, description, children }: PortalShel
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen w-full flex-col brand-page-shell">
+    <div className="flex h-screen w-full flex-col overflow-hidden brand-page-shell">
+      <div className="sr-only" aria-live="polite">
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
       {/* Navbar (Full Width at Top) */}
       <Navbar onMenuClick={() => setIsSidebarOpen(true)} />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Mobile Sidebar Overlay */}
         {isSidebarOpen && (
           <div 
@@ -51,17 +55,15 @@ export default function PortalShell({ title, description, children }: PortalShel
         <Sidebar />
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
             <div className="space-y-6">
               {children}
             </div>
           </div>
+          <Footer />
         </main>
       </div>
-
-      {/* Footer (Full Width at Bottom) */}
-      <Footer />
     </div>
   );
 }

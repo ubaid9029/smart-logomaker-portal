@@ -1,103 +1,109 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Users,
   Layers,
   Activity,
   Database,
-  ArrowUpRight,
-  MoreHorizontal,
-  Loader2
+  Loader2,
 } from "lucide-react";
 
 import PortalShell from "../portal-shell";
 
+type DashboardMetric = { label: string; value: string; detail: string };
+type FeatureUsageItem = { label: string; percentage: number; detail: string };
+type RecentRequestLog = {
+  id: string;
+  event_name: string | null;
+  response_status: number | null;
+  response_message: string | null;
+  endpoint: string | null;
+  method: string | null;
+};
+
 export default function DashboardPage() {
-  const [metrics, setMetrics] = useState<any[]>([]);
-  const [featureUsage, setFeatureUsage] = useState<any[]>([]);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<DashboardMetric[]>([]);
+  const [featureUsage, setFeatureUsage] = useState<FeatureUsageItem[]>([]);
+  const [recentActivity, setRecentActivity] = useState<RecentRequestLog[]>([]);
   const [activeUsers, setActiveUsers] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const { getPlatformStats, getFeatureAdoption, listActivityLogs, getLiveActiveUsers } = await import("../../lib/adminPortalData");
-        
-        const [stats, features, logs, liveUsers] = await Promise.all([
-          getPlatformStats(),
-          getFeatureAdoption(),
-          listActivityLogs(4),
-          getLiveActiveUsers()
-        ]);
+        const response = await fetch("/api/dashboard-stats", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`Dashboard stats request failed: ${response.status}`);
+        }
 
-        setMetrics(stats);
-        setFeatureUsage(features);
-        setRecentActivity(logs);
-        setActiveUsers(liveUsers);
+        const payload = await response.json();
+        setMetrics(payload.metrics || []);
+        setFeatureUsage(payload.featureUsage || []);
+        setRecentActivity(payload.recentActivity || []);
+        setActiveUsers(payload.activeUsers || 0);
       } catch (err) {
         console.error("Dashboard Load Error:", err);
       } finally {
         setLoading(false);
       }
     }
-    loadData();
+    void loadData();
   }, []);
 
   const metricIcons = {
     "Total Users": Users,
     "Logo Generations": Layers,
     "API Load (24h)": Activity,
-    "System Events": Database
+    "System Events": Database,
   };
 
   return (
-    <PortalShell
-      title="Dashboard"
-      description={`${activeUsers} Live Active Users right now`}
-    >
+    <PortalShell title="Dashboard" description={`${activeUsers} Live Active Users right now`}>
       {loading ? (
-        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
           <Loader2 className="h-10 w-10 animate-spin text-orange-500" />
-          <p className="text-xs font-black uppercase tracking-widest text-muted-foreground animate-pulse">Aggregating Live Data...</p>
+          <p className="animate-pulse text-xs font-black uppercase tracking-widest text-muted-foreground">Aggregating Live Data...</p>
         </div>
       ) : (
         <>
           <section className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             {metrics.map((metric) => {
               const Icon = metricIcons[metric.label as keyof typeof metricIcons] || Activity;
-              const colorClass = 
-                metric.label === "Total Users" ? "bg-blue-50 text-blue-500 shadow-blue-100" :
-                metric.label === "Logo Generations" ? "bg-rose-50 text-rose-500 shadow-rose-100" :
-                metric.label === "API Load (24h)" ? "bg-orange-50 text-orange-500 shadow-orange-100" :
-                "bg-violet-50 text-violet-500 shadow-violet-100";
-              
+              const colorClass =
+                metric.label === "Total Users"
+                  ? "bg-blue-50 text-blue-500 shadow-blue-100"
+                  : metric.label === "Logo Generations"
+                    ? "bg-rose-50 text-rose-500 shadow-rose-100"
+                    : metric.label === "API Load (24h)"
+                      ? "bg-orange-50 text-orange-500 shadow-orange-100"
+                      : "bg-violet-50 text-violet-500 shadow-violet-100";
+
               return (
-                <article 
-                  key={metric.label} 
-                  className="group relative overflow-hidden brand-panel p-8 rounded-[2.5rem] transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+                <article
+                  key={metric.label}
+                  className="group relative overflow-hidden rounded-[2.5rem] brand-panel p-8 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
                 >
-                  <div className="flex items-start justify-between relative z-10">
-                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-all duration-300 group-hover:scale-110 ${colorClass} shadow-lg`}>
+                  <div className="relative z-10 flex items-start justify-between">
+                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg transition-all duration-300 group-hover:scale-110 ${colorClass}`}>
                       <Icon className="h-7 w-7" />
                     </div>
-                    <div className="text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest bg-green-50 text-green-500">
+                    <div className="rounded-full bg-green-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-green-500">
                       LIVE
                     </div>
                   </div>
 
-                  <div className="mt-8 relative z-10">
+                  <div className="relative z-10 mt-8">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">{metric.label}</p>
-                    <p className="mt-2 text-4xl font-black text-foreground tracking-tighter">{metric.value}</p>
+                    <p className="mt-2 text-4xl font-black tracking-tighter text-foreground">{metric.value}</p>
                   </div>
                 </article>
               );
             })}
           </section>
 
-          <section className="grid gap-8 lg:grid-cols-2 mt-8">
-            <article className="brand-panel p-6 sm:p-8 rounded-[2.5rem]">
+          <section className="mt-8 grid gap-8 lg:grid-cols-2">
+            <article className="brand-panel rounded-[2.5rem] p-6 sm:p-8">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-black text-foreground">Feature Adoption</h3>
                 <button className="text-xs font-bold text-orange-500 hover:underline">Analysis</button>
@@ -106,12 +112,12 @@ export default function DashboardPage() {
                 {featureUsage.map((item) => (
                   <div key={item.label}>
                     <div className="flex items-center justify-between gap-4 text-xs font-bold">
-                      <span className="text-muted-foreground uppercase tracking-[0.1em]">{item.label}</span>
+                      <span className="uppercase tracking-[0.1em] text-muted-foreground">{item.label}</span>
                       <span className="text-foreground">{item.percentage}%</span>
                     </div>
                     <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100">
                       <div
-                        className="h-full rounded-full brand-gradient-bg transition-all duration-1000 shadow-[0_0_12px_rgba(249,115,22,0.3)]"
+                        className="h-full rounded-full brand-gradient-bg shadow-[0_0_12px_rgba(249,115,22,0.3)] transition-all duration-1000"
                         style={{ width: `${item.percentage}%` }}
                       />
                     </div>
@@ -120,24 +126,24 @@ export default function DashboardPage() {
               </div>
             </article>
 
-            <article className="brand-panel p-6 sm:p-8 rounded-[2.5rem]">
+            <article className="brand-panel rounded-[2.5rem] p-6 sm:p-8">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-black text-foreground">Live Activity Stream</h3>
                 <button className="text-xs font-bold text-orange-500 hover:underline">View All</button>
               </div>
               <div className="mt-8 space-y-1">
                 {recentActivity.map((log) => (
-                  <div key={log.id} className="group p-4 rounded-2xl hover:bg-slate-50 transition-all duration-300 border-b border-slate-50 last:border-0">
+                  <div key={log.id} className="group rounded-2xl border-b border-slate-50 p-4 transition-all duration-300 last:border-0 hover:bg-slate-50">
                     <div className="flex items-center justify-between gap-3 text-[9px] font-black uppercase tracking-widest">
-                      <span className="text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">{log.source}</span>
-                      <span className={`px-2 py-0.5 rounded-full ${log.status < 400 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
-                        {log.status}
+                      <span className="rounded-full bg-orange-50 px-2 py-0.5 text-orange-500">{log.event_name || "request"}</span>
+                      <span className={`rounded-full px-2 py-0.5 ${(log.response_status || 0) < 400 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"}`}>
+                        {log.response_status}
                       </span>
                     </div>
-                    <p className="mt-3 text-sm font-bold text-foreground leading-snug truncate">{log.message}</p>
-                    <div className="mt-3 flex items-center gap-2 text-[10px] text-muted-foreground font-bold">
-                      <span className="font-mono bg-white px-2 py-0.5 rounded shadow-sm text-slate-400">{log.method}</span>
-                      <span className="truncate opacity-60 group-hover:opacity-100 transition-opacity">{log.endpoint}</span>
+                    <p className="mt-3 truncate text-sm font-bold leading-snug text-foreground">{log.response_message || log.endpoint}</p>
+                    <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-muted-foreground">
+                      <span className="rounded bg-white px-2 py-0.5 font-mono text-slate-400 shadow-sm">{log.method || "GET"}</span>
+                      <span className="truncate opacity-60 transition-opacity group-hover:opacity-100">{log.endpoint}</span>
                     </div>
                   </div>
                 ))}
